@@ -9,6 +9,8 @@ library(dplyr)
 library(tibble)
 library(readxl)
 
+citation("sqldf")
+
 setwd("C:/Users/Beata/Documents/Epi25letters/ExECTOutput")
 #Created new DOC column for all the letters so this will be used as a link when loaded to SAIL
 #This was done in Excel on Epi25_LetterList.csv
@@ -101,12 +103,14 @@ write.csv(Epi25_PRESC_DOC,file="Epi25_PRESC_DOC.csv", row.names = TRUE)
 Epi25_PRESC <- read_delim("Epi25_PRESC.csv", delim = ",", escape_double = FALSE, trim_ws = TRUE)
 
 
+Epi25_PRESC$DOSE <- as.numeric(Epi25_PRESC$DOSE)
+
 Prescriptions <- Epi25_PRESC %>% mutate(Quantity_mg = as.numeric(case_when(UNIT == "mg" ~ DOSE,
                                                            UNIT == "g" ~ DOSE*1000),.after = "UNIT" ))
 
 #4 Combining daily dose ----
 #creating a subset of prescriptions output with a combined daily dose, first converting quantity to mg for all doses
-
+ 
 View(Prescriptions)   #just checking...
 
 #Total daily dose is Frequency * Dose and is called DailyDose and this can be calculetad
@@ -131,6 +135,8 @@ Prescriptions <- Prescriptions %>% mutate(Q3rdDose = case_when(AnotherDose == '2
  
 # 5 DailyDose calculation ----
 
+Prescriptions$FREQUENCY <- as.numeric(Prescriptions$FREQUENCY)
+
 Prescriptions <- Prescriptions %>% mutate(DailyDose = case_when(FREQUENCY >1 ~ Quantity_mg*FREQUENCY, 
                  !is.na(Q3rdDose) & AnotherDose == '2nd' ~  Quantity_mg + Q2ndDose + Q3rdDose,             
                  is.na(Q3rdDose) & AnotherDose == '2nd' ~ Quantity_mg + Q2ndDose,
@@ -138,8 +144,6 @@ Prescriptions <- Prescriptions %>% mutate(DailyDose = case_when(FREQUENCY >1 ~ Q
                 START != lead(START) & START != lead(START, 2)  & FREQUENCY == 1 ~ Quantity_mg,
                 START == lead( START) & LETTER != lead(LETTER) & CUI != lead(CUI)  & FREQUENCY == 1 ~ Quantity_mg,
                 is.na(FREQUENCY) & is.na(AnotherDose) & CUI == "C0055891" ~ Quantity_mg), .after = "Q3rdDose" )
-
-View(Prescriptions) 
 
 
 #converting brand names to generic names so some continuation can be seen
