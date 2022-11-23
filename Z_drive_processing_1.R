@@ -1,5 +1,5 @@
 # ExECT precessing using of z drive output. As IDEx was run as part of the ExECT pipeline we need to include 
-# clinic date letter date NHS, DoB and Hosp number are part of the putputs.
+# clinic date letter date NHS, DoB and Hosp number are part of the outputs.
 # after creating all the output files (here used groovy and gate developer)
 
 library(readr)
