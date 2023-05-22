@@ -916,10 +916,10 @@ View(Presc_Matched)
  
 # Dissociative seizures - extraction from Patient History output
  DisSeiz <- PH_Matched %>% 
-   filter(CUI == 'C3495874'|CUI == 'C1142430'|CUI == 'C0349245') %>% # 104 montions
+   filter(CUI == 'C3495874'|CUI == 'C1142430'|CUI == 'C0349245') %>% # 104 mentions (in 701 biobank letters)
    filter(Certainty > 3)  # 64 certainty 4 and 5 
  
-#This uses the System ID asigned with a very strict match including postcode so individuals who have moved may be counted twice
+#This uses the System ID assigned with a very strict match including postcode so individuals who have moved may be counted twice
  
  DisSeiz_Ind <- DisSeiz %>% 
    distinct(SYSTEM_ID)
