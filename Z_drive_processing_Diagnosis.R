@@ -150,11 +150,18 @@ distinct()
 View(EpiTypeGroupsNHS_No)
 
 EpiTypeGroupsNHS_NoF <- EpiTypeGroupsNHS_No %>% 
-  filter(EpilepsyType == "Focal")
+  filter(EpilepsyType == "Focal") %>% 
+count()
+
+View(EpiTypeGroupsNHS_NoF) # 61
+
 head(EpiTypeGroupsNHS_NoF)
 
 EpiTypeGroupsNHS_NoG <- EpiTypeGroupsNHS_No %>% 
-  filter(EpilepsyType == "Generalised")
+  filter(EpilepsyType == "Generalised") %>% 
+count()   #36
+View(EpiTypeGroupsNHS_NoG)
+
 head(EpiTypeGroupsNHS_NoG)
 
 

@@ -1,13 +1,12 @@
 #Prescription output from ExECT precessing
 
 library(readr)
+library(sqldf)
 library(RSQLite)
 library(proto)
 library(gsubfn)
-library(sqldf)
 library(dplyr)
 library(tibble)
-library(readxl)
 
 setwd("C:/Users/Beata/Documents/Epi25letters/ExECTOutput")
 #Created new DOC column for all the letters so this will be used as a link when loaded to SAIL
@@ -69,22 +68,12 @@ View(Epi25_RecDate_DOC)
 
 
 Epi25_PRESC  <- left_join(Epi25_Prescriptions,
-                            Epi25_RecDate_DOC %>% select(- SYSTEM_ID, - Clinic_Date, -LetDate, -DOC),
+                            Epi25_RecDate_DOC %>% select(- SYSTEM_ID, - Clinic_Date, -LetDate),
                             by = "LETTER") 
 
 View(Epi25_PRESC)
+#making the final selection , order  and upper case for field names for the SAIL upload
 
-names (Epi25_PRESC)  <- toupper (names(Epi25_PRESC))
-
-Epi25_PRESC$DOSE <- as.numeric(Epi25_PRESC$DOSE,decimals = NULL)#converting DOSE to nemeric
-Epi25_PRESC$FREQUENCY <- as.numeric(Epi25_PRESC$FREQUENCY, decimals = NULL)#converting Frequency to nemeric
-
-
-write.csv(Epi25_PRESC,file="Epi25_PRESC.csv", row.names = TRUE) # this is to be used locally, version with DOC is for SAIL
-
-
-# FOR SAILGATE only- making the final selection , order  and upper case for field names for the SAIL upload
-#===================
 Epi25_PRESC_DOC <- Epi25_PRESC %>% select(SYSTEM_ID, DATEREC, DOC,Start,End, CUI, Name, Dose, Unit, Frequency)
     names (Epi25_PRESC_DOC)  <- toupper (names(Epi25_PRESC_DOC))
 Epi25_PRESC_DOC$DOSE <- as.numeric(Epi25_PRESC_DOC$DOSE,decimals = NULL)#converting DOSE to nemeric
@@ -93,16 +82,12 @@ Epi25_PRESC_DOC$FREQUENCY <- as.numeric(Epi25_PRESC_DOC$FREQUENCY, decimals = NU
     
 View(Epi25_PRESC_DOC)
 write.csv(Epi25_PRESC_DOC,file="Epi25_PRESC_DOC.csv", row.names = TRUE)
-#From here on analysis that can be done in the Gateway
+#From here on analysis that can be done in the Sailgate 
 
 #Creating Quantity_mg for all doses expressed in mg
-#========================================================
 
-Epi25_PRESC <- read_delim("Epi25_PRESC.csv", delim = ",", escape_double = FALSE, trim_ws = TRUE)
-
-
-Prescriptions <- Epi25_PRESC %>% mutate(Quantity_mg = as.numeric(case_when(UNIT == "mg" ~ DOSE,
-                                                           UNIT == "g" ~ DOSE*1000),.after = "UNIT" ))
+Prescriptions <- Epi25_PRESC_DOC %>% mutate(Quantity_mg = case_when(UNIT == "mg" ~ DOSE,
+                                                           UNIT == "g" ~ DOSE*1000),.after = "UNIT" )
 
 #4 Combining daily dose ----
 #creating a subset of prescriptions output with a combined daily dose, first converting quantity to mg for all doses
@@ -115,14 +100,14 @@ View(Prescriptions)   #just checking...
 #prescriptions should be sorted by "DOC" ,"Start" , CUI first
 
 Prescriptions %>% 
-        arrange(SYSTEM_ID, DATEREC, CUI, START, LETTER)
+        arrange(SYSTEM_ID, DATEREC, CUI, START, DOC)
 
 #Find cases when DOSE is a second  or third dose of the same drug - create AnotherDose column
 
 
-Prescriptions <- Prescriptions %>% mutate (AnotherDose = case_when(LETTER == lag(LETTER) & START == lag(START) & START != lag(START, 2) & CUI == lag(CUI) & FREQUENCY == '1' & lag(FREQUENCY) == '1' ~ '2nd',
-                            LETTER == lag(LETTER) & LETTER == lag(LETTER,2) & START == lag(START) & START == lag(START, 2) & CUI == lag(CUI) & CUI == lag(CUI, 2) & FREQUENCY == '1' & lag(FREQUENCY, 2) == '1'~ '3rd',
-                            LETTER == lag(LETTER,2) & START == lag(START, 2) & START != lag(START) & FREQUENCY == '1' & lag(FREQUENCY, 2) == '1' ~ '2nd'), .after = "FREQUENCY")
+Prescriptions <- Prescriptions %>% mutate (AnotherDose = case_when(DOC == lag(DOC) & START == lag(START) & START != lag(START, 2) & CUI == lag(CUI) & FREQUENCY == '1' & lag(FREQUENCY) == '1' ~ '2nd',
+                            DOC == lag(DOC) & DOC == lag(DOC,2) & START == lag(START) & START == lag(START, 2) & CUI == lag(CUI) & CUI == lag(CUI, 2) & FREQUENCY == '1' & lag(FREQUENCY, 2) == '1'~ '3rd',
+                            DOC == lag(DOC,2) & START == lag(START, 2) & START != lag(START) & FREQUENCY == '1' & lag(FREQUENCY, 2) == '1' ~ '2nd'), .after = "FREQUENCY")
 
 #Extract values of the 2nd and 3rd dose in separate columns but in one row (for some reason adding up lag column references does not work)
 Prescriptions <- Prescriptions %>% mutate(Q2ndDose = case_when(AnotherDose == '2nd' & START == lag(START) & CUI == lag(CUI) ~ lag(Quantity_mg), 
@@ -136,7 +121,7 @@ Prescriptions <- Prescriptions %>% mutate(DailyDose = case_when(FREQUENCY >1 ~ Q
                  is.na(Q3rdDose) & AnotherDose == '2nd' ~ Quantity_mg + Q2ndDose,
                 is.na(AnotherDose) & is.na(Q2ndDose) & is.na(Q3rdDose) & 
                 START != lead(START) & START != lead(START, 2)  & FREQUENCY == 1 ~ Quantity_mg,
-                START == lead( START) & LETTER != lead(LETTER) & CUI != lead(CUI)  & FREQUENCY == 1 ~ Quantity_mg,
+                START == lead( START) & DOC != lead(DOC) & CUI != lead(CUI)  & FREQUENCY == 1 ~ Quantity_mg,
                 is.na(FREQUENCY) & is.na(AnotherDose) & CUI == "C0055891" ~ Quantity_mg), .after = "Q3rdDose" )
 
 View(Prescriptions) 
@@ -158,8 +143,8 @@ Prescriptions <- Prescriptions %>%
          CUI == "C2725260" ~ "Eslicarbazepine",
          NAME == "Tegretol" ~ "Carbamazepine",
          NAME == "Carbamazepine" ~ "Carbamazepine",
-         CUI == "C0700087" ~ "Carbamazepine",
-         CUI == "C0006949" ~"Carbamazepine",
+         CUI == "C0360123" ~ "Carbamazepine",
+         CUI == "C0700087" ~"Carbamazepine",
          NAME == "Phenytoin" ~ "Phenytoin",
          NAME == "Topiramate" ~ "Topiramate",
          CUI == "C0076829" ~ "Topiramate",
@@ -169,10 +154,11 @@ Prescriptions <- Prescriptions %>%
          NAME == "Clobazam" ~ "Clobazam",
          NAME == "Zonisamide" ~ "Zonisamide",
          NAME == "Lacosamide" ~ "Lacosamide" ,
-         CUI == "C0893761" ~ "Lacosamide" ,
+         NAME == "Perampanel" ~ "Perampanel" ,
          CUI == "C2698764" ~ "Perampanel",
          CUI == "C0009011" ~ "Clonazepam",
          CUI == "C0060926" ~ "Gabapentin",
+         CUI == "C0893761" ~ "Lacosamide",
          CUI == "C0700016" ~ "Primidone",
          CUI == "C2725260" ~ "Eslicarbazepine", 
          CUI == "C0657912"~ "Pregabalin",
@@ -182,61 +168,28 @@ Prescriptions <- Prescriptions %>%
 #date, CUI and daily dose for each person
 
 #selecting a subset with the Daily Dose
-DailyPrescription <- select(Prescriptions,SYSTEM_ID, LETTER, DATEREC, CUI, PREF, DailyDose)
+DailyPrescription <- select(Prescriptions,SYSTEM_ID, DATEREC, CUI, PREF, DailyDose)
 
 DailyPrescriptionFull = na.omit(DailyPrescription) # removing NA values from DailyDose (from the double/triple doses)
 
 DailyPrescriptionFinal =  unique(DailyPrescriptionFull) # removing duplicate records = which gives 962 records
   
 #Creating a df of maximum dose for each drug (CUI) and date, slice keeps the max daily dose, removing any lower doses of the same drug, per group
-DailyPrescriptionMax <- DailyPrescriptionFinal %>% group_by(SYSTEM_ID, LETTER, DATEREC, CUI, PREF) %>% slice(which.max(DailyDose))
+DailyPrescriptionMax <- DailyPrescriptionFinal %>% group_by(SYSTEM_ID, DATEREC, CUI, PREF) %>% slice(which.max(DailyDose))
 
 View(DailyPrescriptionMax)  #This is the final output that can be linked to seizure frequency for example
 
 DailyPrescriptionMax$DATEREC <- as.Date(DailyPrescriptionMax$DATEREC, "%d/%m/%Y")   #making sure these are dates
 
- 
-
-write.csv(DailyPrescriptionMax,file="DailyPrescriptionMaxPREF.csv", row.names = TRUE)
+ write.csv(DailyPrescriptionMax,file="DailyPrescriptionMaxPREF.csv", row.names = TRUE)
 
 
-#======================================================
-
-#
-
-Prescriptions <- read_delim("DailyPrescriptionMaxPREF.csv", delim = ",", escape_double = FALSE, trim_ws = TRUE)
-
-View(Prescriptions) 
- 
- 
- Drug_Top_Doses <- read_excel("Drug_Top_Doses.xlsx")
- 
- View(Drug_Top_Doses)
- 
- PrescMDose <- left_join(Prescriptions, Drug_Top_Doses,  by = c("PREF" = "ASM")) %>% 
- rename(TopDose = Dose)
- 
- View(PrescMDose)
- 
- PrescMD <- PrescMDose %>% 
-   mutate(DailyRate = as.numeric(DailyDose*100) / TopDose/100)
- 
- PrescMD$DailyRate <- format(round(PrescMD$DailyRate, 2), nsmall = 2)
- PrescMD$DailyRate <- as.numeric(PrescMD$DailyRate)
- 
- #final table with the prescribed dose also shown as a proportion of the daily recommended dose
- 
- write_excel_csv(PrescMD, file = "PrescMD.csv") 
- 
- View(PrescMD)
  
  
  
- Precription_per_person <- PrescMD %>% 
+ Precription_per_person <- DailyPrescriptionMax %>% 
   group_by(SYSTEM_ID) %>% 
-count(SYSTEM_ID)   # this gives a full daily dose for each drug by date 
- 
- 
+count(SYSTEM_ID)
 
 View(Precription_per_person)
 
@@ -249,73 +202,9 @@ View(Count_per_ID)
 
 library(ggplot2)
 
-Presc_P1 <- PrescMD %>% 
-  filter(SYSTEM_ID == 1213)
+Presc_P1 <- DailyPrescriptionMax %>% 
+  filter(SYSTEM_ID == x)
 View(Presc_P1)
-
-#Plot 1213
-
- 
-Presc_P1 %>% 
-  ggplot( aes(x=DATEREC, y=DailyRate, group=PREF, color=PREF)) +
-  geom_point(size = 4)+geom_line(size = 2)+ scale_y_continuous()+
-  scale_colour_manual(values = c("Levetiracetam" = "seagreen", "Lamotrigine" = "brown3"))+
-  labs(x="Record date", y="ASM daily dose as a proportion of recommended maximum dailly dose", colour = "ASM")+ theme (axis.text = element_text(size = 20), 
-  axis.title = element_text(size = 15), plot.title = element_text(size = 20), legend.text = element_text(size = 15),
-  legend.title = element_text(size = 20))
-
-#1151
-                                                                      
-Presc_P2 <- PrescMD %>% 
-  filter(SYSTEM_ID == 1151)
-View(Presc_P2)
-
-#Plot 1151
-Presc_P2 %>% 
-  ggplot( aes(x=DATEREC, y=DailyRate, group=PREF, color=PREF)) +
-  geom_point(size = 4)+geom_line(size = 2)+ scale_y_continuous()+
-  scale_colour_manual(values = c("Levetiracetam" = "seagreen", "Lamotrigine" = "brown3","Gabapentin" = "blue", "Primidone" = "cyan"))+
-  labs(title="Person Two - Prescriptions", x="Record date", y="ASM daily dose as a proportion of recommended maximum dailly dose", colour = "ASM")+ theme (axis.text = element_text(size = 20), 
-                                                                                                             axis.title = element_text(size = 15), plot.title = element_text(size = 20), legend.text = element_text(size = 15),
-                                                                                                             legend.title = element_text(size = 20))
-#1216
-
-Presc_P3 <- PrescMD %>% 
-  filter(SYSTEM_ID == 1216)
-View(Presc_P3)
-
-
-#Plot 1216
-Presc_P3 %>% 
-  ggplot( aes(x=DATEREC, y=DailyRate, group=PREF, color=PREF)) +
-  geom_point(size = 4)+geom_line(size = 2)+ scale_y_continuous()+
-  scale_colour_manual(values = c("Levetiracetam" = "seagreen", "Lacosamide" = "tan3","Carbamazepine" = "purple", "Topiramate" = "tomato1","Clobazam" = "yellow3" ))+
-  labs(title="Person Three - Prescriptions", x="Record date", y="ASM daily dose as a proportion of recommended maximum dailly dose", colour = "ASM")+ theme (axis.text = element_text(size = 20), 
-  axis.title = element_text(size = 15), plot.title = element_text(size = 20), legend.text = element_text(size = 15),
-  legend.title = element_text(size = 20))
-#1216      
-
-
-group.colour <- c(Carbamazepine = "blue2", Levetiracetam = "grey", Perampanel = "darkgreen" , Clobazam = "red", Topiramate = "orange")
-
-
-
-write.csv(data,file="Person3.csv", row.names = TRUE)                                                                    
-                                                                      
-                                                                      
-                                                                      
-                                                                      
-                                                                      
-                                                                      
-                                                                      
-                                                                      
-                                                                      
-                                                                      
-                                                                      
-        
-
-
-
 
 
 
